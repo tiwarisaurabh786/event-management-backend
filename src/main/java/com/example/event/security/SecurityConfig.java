@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -34,35 +35,52 @@ public class SecurityConfig {
         http
             .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
+
+            // IMPORTANT
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(
+                    SessionCreationPolicy.STATELESS
+                )
+            )
+
             .authorizeHttpRequests(auth -> auth
 
-                // Public APIs
+                // PUBLIC APIs
                 .requestMatchers("/api/auth/**").permitAll()
 
                 // Allow preflight requests
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/**")
+                .permitAll()
 
-                // GET APIs
-                .requestMatchers(HttpMethod.GET)
-                .hasAnyRole("ADMIN", "STUDENT")
+                // PUBLIC GET for events
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/events/**"
+                ).permitAll()
 
-                // Admin access for event management
-                .requestMatchers(HttpMethod.POST, "/api/events/**")
-                .hasRole("ADMIN")
+                // Admin only
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/events/**"
+                ).hasRole("ADMIN")
 
-                .requestMatchers(HttpMethod.PUT, "/api/events/**")
-                .hasRole("ADMIN")
+                .requestMatchers(
+                    HttpMethod.PUT,
+                    "/api/events/**"
+                ).hasRole("ADMIN")
 
-                .requestMatchers(HttpMethod.DELETE, "/api/events/**")
-                .hasRole("ADMIN")
+                .requestMatchers(
+                    HttpMethod.DELETE,
+                    "/api/events/**"
+                ).hasRole("ADMIN")
 
-                // Student registrations
+                // Student registration APIs
                 .requestMatchers("/api/registrations/**")
                 .hasRole("STUDENT")
 
-                // Any other request
                 .anyRequest().authenticated()
             )
+
             .addFilterBefore(
                 jwtFilter,
                 UsernamePasswordAuthenticationFilter.class
@@ -74,9 +92,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration config = new CorsConfiguration();
+        CorsConfiguration config =
+                new CorsConfiguration();
 
-        // Vercel Frontend URLs
         config.setAllowedOrigins(List.of(
             "https://event-management-system-xi-eight.vercel.app",
             "https://event-management-system-m80aghlte-saurabh-twry-s-projects.vercel.app"
@@ -96,7 +114,10 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration(
+                "/**",
+                config
+        );
 
         return source;
     }
