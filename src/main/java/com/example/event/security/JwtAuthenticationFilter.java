@@ -3,10 +3,12 @@ package com.example.event.security;
 import com.example.event.entity.User;
 import com.example.event.repository.UserRepository;
 import io.jsonwebtoken.Claims;
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.*;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -29,32 +31,57 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain chain
     ) throws ServletException, IOException {
 
+        // 🔥 IMPORTANT: login/register ko skip karo
+        String path = request.getServletPath();
+
+        if (path.startsWith("/api/auth")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String header = request.getHeader("Authorization");
 
-        if (header != null && header.startsWith("Bearer ")) {
+        // No token -> आगे जाने दो
+        if (header == null || !header.startsWith("Bearer ")) {
+            chain.doFilter(request, response);
+            return;
+        }
 
-            String token = header.substring(7);
+        String token = header.substring(7);
 
-            try {
-                Claims claims = jwtUtil.extractClaims(token);
-                String email = claims.getSubject();
-                String role = claims.get("role", String.class);
+        try {
+            Claims claims = jwtUtil.extractClaims(token);
 
-                User user = userRepo.findByEmail(email).orElse(null);
+            String email = claims.getSubject();
+            String role = claims.get("role", String.class);
 
-                if (user != null) {
-                    UsernamePasswordAuthenticationToken auth =
-                            new UsernamePasswordAuthenticationToken(
-                                    user,
-                                    null,
-                                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                            );
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                }
+            User user = userRepo.findByEmail(email)
+                    .orElse(null);
 
-            } catch (Exception ex) {
-                ex.printStackTrace(); // 🔥 now you SEE the error
+            if (user != null &&
+                    SecurityContextHolder
+                            .getContext()
+                            .getAuthentication() == null) {
+
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(
+                                user,
+                                null,
+                                List.of(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_" + role
+                                        )
+                                )
+                        );
+
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(auth);
             }
+
+        } catch (Exception ex) {
+            System.out.println("JWT ERROR: " + ex.getMessage());
+            ex.printStackTrace();
         }
 
         chain.doFilter(request, response);
